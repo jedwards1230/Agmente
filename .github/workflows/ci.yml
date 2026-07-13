@@ -1,0 +1,81 @@
+name: CI
+
+# Unsigned iOS-simulator build + test for the `fork` line.
+# Public repo → GitHub-hosted macOS runners (free minutes). No secrets needed:
+# the simulator build disables code signing, so the PR lane never touches the
+# App Store Connect / TestFlight credentials used by release-testflight.yml.
+
+on:
+  push:
+    branches: [fork]
+  pull_request:
+    branches: [fork]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (iOS Simulator, unsigned)
+    # macos-26 (Xcode 26 default) is required: the app uses iOS 26 SDK APIs
+    # (Liquid Glass `.glassEffect`, `DefaultToolbarItem`) even though it deploys
+    # back to iOS 18, so it will not compile against the Xcode 16 SDK on macos-15.
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      # Named simulator to build/test against. macos-26 images ship the iPhone 17
+      # family with iOS 26 runtimes. Bump if the runner image drops this device.
+      SIMULATOR_NAME: iPhone 17
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list devices available | grep -i iphone || true
+
+      - name: Build for testing (unsigned, all targets)
+        # Compiles the app + both test targets (AgmenteTests, AgmenteUITests) so
+        # the whole tree is kept honest, without gating on the UI tests running.
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project Agmente.xcodeproj \
+            -scheme Agmente \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Unit tests (AgmenteTests)
+        # PR gate runs the unit-test bundle only. The AgmenteUITests launch tests
+        # take 75-230s each and flake under headless CI (the generated
+        # testLaunch() timed out on 1 of 4 attempts on an unmodified tree), and
+        # the Codex UI E2E is opt-in (see AgmenteUITests/AGENTS.md). Run the UI
+        # suite locally when touching UI flows.
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -project Agmente.xcodeproj \
+            -scheme Agmente \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -only-testing:AgmenteTests \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results
+          path: TestResults.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
