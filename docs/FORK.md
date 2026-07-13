@@ -66,7 +66,10 @@ proposed upstream.
 
 ## Building locally
 
-Requires **Xcode 16+** (Swift 6 tools, iOS 18 deployment target).
+Requires **Xcode 26** (Swift 6 tools). The deployment target is iOS 18, but the
+app source uses iOS 26 SDK APIs (Liquid Glass `.glassEffect`, the new
+`DefaultToolbarItem` toolbar API), so it will **not** compile against the Xcode
+16 SDK — build with Xcode 26 even though it installs back to iOS 18.
 
 ```bash
 git clone https://github.com/jedwards1230/Agmente.git
@@ -91,7 +94,7 @@ No secrets are needed to build. Remote SPM dependencies resolve from
 xcodebuild build \
   -project Agmente.xcodeproj \
   -scheme Agmente \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -99,9 +102,9 @@ xcodebuild build \
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) builds and tests the
 app on an **unsigned iOS Simulator** for every push and PR to `fork`. It runs on
-GitHub-hosted `macos-15` runners (free minutes on a public repo) and needs **no
-secrets** — signing is disabled for the simulator. All third-party actions are
-SHA-pinned.
+GitHub-hosted `macos-26` runners (Xcode 26; free minutes on a public repo) and
+needs **no secrets** — signing is disabled for the simulator. All third-party
+actions are SHA-pinned.
 
 ## TestFlight release setup (one-time, manual)
 

@@ -35,7 +35,9 @@ concurrency:
 jobs:
   testflight:
     name: Archive & upload to TestFlight
-    runs-on: macos-15
+    # macos-26 (Xcode 26) — the app uses iOS 26 SDK APIs, so it will not build
+    # against the Xcode 16 SDK on macos-15. Keep in lockstep with ci.yml.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       SCHEME: Agmente

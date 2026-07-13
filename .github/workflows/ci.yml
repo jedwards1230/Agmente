@@ -21,12 +21,15 @@ concurrency:
 jobs:
   build-test:
     name: Build & test (iOS Simulator, unsigned)
-    runs-on: macos-15
+    # macos-26 (Xcode 26 default) is required: the app uses iOS 26 SDK APIs
+    # (Liquid Glass `.glassEffect`, `DefaultToolbarItem`) even though it deploys
+    # back to iOS 18, so it will not compile against the Xcode 16 SDK on macos-15.
+    runs-on: macos-26
     timeout-minutes: 30
     env:
-      # Named simulator to build/test against. macos-15 images ship Xcode 16.x
-      # with the iPhone 16 family. Bump if the runner image drops this device.
-      SIMULATOR_NAME: iPhone 16
+      # Named simulator to build/test against. macos-26 images ship the iPhone 17
+      # family with iOS 26 runtimes. Bump if the runner image drops this device.
+      SIMULATOR_NAME: iPhone 17
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
