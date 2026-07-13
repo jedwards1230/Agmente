@@ -1,10 +1,11 @@
 # Fork notes
 
-This is a personal/family fork of [rebornix/Agmente](https://github.com/rebornix/Agmente)
-(MIT). It exists to run a private [TestFlight](https://developer.apple.com/testflight/)
-build of the app against a self-hosted coding-agent daemon, without waiting on
-the App Store listing. It carries **no upstream-mergeable product changes** —
-only fork identity (bundle ID, display name), CI, and a TestFlight release lane.
+A downstream fork of [rebornix/Agmente](https://github.com/rebornix/Agmente)
+(MIT), maintained for use with the gofer ACP daemon. It provides independent
+signing, CI, and [TestFlight](https://developer.apple.com/testflight/)
+distribution configuration so builds can be produced from this fork directly.
+It carries **no upstream-mergeable product changes** — only fork identity
+(bundle ID, display name), CI, and a TestFlight release lane.
 
 Upstream copyright and the MIT `LICENSE` are kept intact. Nothing here changes
 app behavior.
@@ -83,10 +84,10 @@ open Agmente.xcodeproj
 No secrets are needed to build. Remote SPM dependencies resolve from
 `Package.resolved` on first build.
 
-- **Free Apple ID:** installs on your own device but the signature expires
-  after 7 days (re-run from Xcode to renew).
+- **Free Apple ID:** installs on a registered device but the signature
+  expires after 7 days (re-run from Xcode to renew).
 - **Paid Apple Developer account:** signs for ~1 year, and is required for
-  TestFlight distribution to family.
+  TestFlight distribution.
 
 ### Unsigned command-line build (what CI runs)
 
@@ -142,8 +143,8 @@ repo only ever stores placeholders.
    | `AGMENTE_DEVELOPMENT_TEAM` | your **Team ID** |
 
 5. **Add internal testers**: App Store Connect → your app → TestFlight →
-   Internal Testing → add your family (they must be added as Users in App Store
-   Connect first, or use an internal group). Internal builds skip Beta App
+   Internal Testing → add your internal testers (they must be added as Users in
+   App Store Connect first, or use an internal group). Internal builds skip Beta App
    Review and are available in minutes.
 
 6. **Release a build**: push a tag (`git tag v2026.07.1 && git push origin
