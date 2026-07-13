@@ -1,0 +1,59 @@
+name: CI
+
+# Unsigned iOS-simulator build + test for the `fork` line.
+# Public repo → GitHub-hosted macOS runners (free minutes). No secrets needed:
+# the simulator build disables code signing, so the PR lane never touches the
+# App Store Connect / TestFlight credentials used by release-testflight.yml.
+
+on:
+  push:
+    branches: [fork]
+  pull_request:
+    branches: [fork]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (iOS Simulator, unsigned)
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      # Named simulator to build/test against. macos-15 images ship Xcode 16.x
+      # with the iPhone 16 family. Bump if the runner image drops this device.
+      SIMULATOR_NAME: iPhone 16
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list devices available | grep -i iphone || true
+
+      - name: Build & test (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Agmente.xcodeproj \
+            -scheme Agmente \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results
+          path: TestResults.xcresult
+          retention-days: 7
+          if-no-files-found: ignore

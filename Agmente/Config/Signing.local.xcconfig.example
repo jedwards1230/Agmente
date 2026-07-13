@@ -1,3 +1,12 @@
-// Copy this file to Signing.local.xcconfig and set your Apple Developer Team ID.
-// This file is gitignored.
-AGMENTE_DEVELOPMENT_TEAM =
+// Copy this file to `Signing.local.xcconfig` (same directory) and set your
+// Apple Developer Team ID. `Signing.local.xcconfig` is gitignored, so your
+// Team ID never lands in git.
+//
+//   cp Signing.local.xcconfig.example Signing.local.xcconfig
+//
+// Find your Team ID at https://developer.apple.com/account → Membership,
+// or run: xcrun xcodebuild -showBuildSettings | grep DEVELOPMENT_TEAM
+//
+// A free Apple ID also works for on-device installs (7-day resign); a paid
+// Apple Developer account signs for ~1 year and is required for TestFlight.
+AGMENTE_DEVELOPMENT_TEAM = ABCDE12345

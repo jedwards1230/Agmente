@@ -1,0 +1,130 @@
+name: Release (TestFlight internal)
+
+# SCAFFOLD — archives the app, signs it with App Store Connect cloud-managed
+# signing, and uploads the build to TestFlight internal testing.
+#
+# This workflow CANNOT run until the repo owner provisions the secrets listed
+# under "Required secrets" below and creates the matching app record in App
+# Store Connect. See docs/FORK.md → "TestFlight release setup" for the exact,
+# one-time manual steps.
+#
+# Auth model: App Store Connect API key (.p8) only. Combined with
+# `-allowProvisioningUpdates`, Xcode does cloud-managed signing — it creates and
+# downloads the distribution certificate + provisioning profile on the runner,
+# so there is NO certificate/profile to export, base64, or store as a secret.
+#
+# Required secrets (repo → Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID                App Store Connect API key ID (e.g. ABCDE12345)
+#   ASC_ISSUER_ID             App Store Connect issuer ID (UUID)
+#   ASC_PRIVATE_KEY           Contents of the AuthKey_XXXX.p8 file (full text)
+#   AGMENTE_DEVELOPMENT_TEAM  Apple Developer Team ID (e.g. ABCDE12345)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Archive & upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      SCHEME: Agmente
+      CONFIGURATION: Release
+      ARCHIVE_PATH: ${{ github.workspace }}/build/Agmente.xcarchive
+      EXPORT_DIR: ${{ github.workspace }}/build/export
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Show toolchain
+        run: xcodebuild -version
+
+      - name: Configure signing team
+        env:
+          AGMENTE_DEVELOPMENT_TEAM: ${{ secrets.AGMENTE_DEVELOPMENT_TEAM }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AGMENTE_DEVELOPMENT_TEAM}" ]; then
+            echo "::error::AGMENTE_DEVELOPMENT_TEAM secret is not set — see docs/FORK.md"
+            exit 1
+          fi
+          printf 'AGMENTE_DEVELOPMENT_TEAM = %s\n' "${AGMENTE_DEVELOPMENT_TEAM}" \
+            > Agmente/Config/Signing.local.xcconfig
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/asc"
+          printf '%s' "${ASC_PRIVATE_KEY}" > "${RUNNER_TEMP}/asc/AuthKey.p8"
+          echo "ASC_KEY_PATH=${RUNNER_TEMP}/asc/AuthKey.p8" >> "${GITHUB_ENV}"
+
+      - name: Archive (cloud-managed signing)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Agmente.xcodeproj \
+            -scheme "${SCHEME}" \
+            -configuration "${CONFIGURATION}" \
+            -destination "generic/platform=iOS" \
+            -archivePath "${ARCHIVE_PATH}" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+
+      - name: Write export options
+        env:
+          AGMENTE_DEVELOPMENT_TEAM: ${{ secrets.AGMENTE_DEVELOPMENT_TEAM }}
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${AGMENTE_DEVELOPMENT_TEAM}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Export .ipa (cloud-managed signing)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "${ARCHIVE_PATH}" \
+            -exportPath "${EXPORT_DIR}" \
+            -exportOptionsPlist "${RUNNER_TEMP}/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "${ASC_KEY_PATH}" \
+            -authenticationKeyID "${ASC_KEY_ID}" \
+            -authenticationKeyIssuerID "${ASC_ISSUER_ID}"
+
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@41bb718fb7b8e0c9824fa3fbe8cd7e6018839a4c # v5.2.1
+        with:
+          app-path: ${{ env.EXPORT_DIR }}/Agmente.ipa
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
