@@ -101,11 +101,23 @@ xcodebuild build \
 
 ## CI
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) builds and tests the
-app on an **unsigned iOS Simulator** for every push and PR to `fork`. It runs on
-GitHub-hosted `macos-26` runners (Xcode 26; free minutes on a public repo) and
-needs **no secrets** — signing is disabled for the simulator. All third-party
-actions are SHA-pinned.
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) compiles the app and
+**both** test targets, then runs the `AgmenteTests` unit suite, on an **unsigned
+iOS Simulator** for every push and PR to `fork`. It runs on GitHub-hosted
+`macos-26` runners (Xcode 26; free minutes on a public repo) and needs **no
+secrets** — signing is disabled for the simulator. All third-party actions are
+SHA-pinned.
+
+The `AgmenteUITests` launch tests are **compiled but not run** in the PR gate:
+each takes 75-230 s and flakes under headless CI, and the Codex UI E2E is opt-in
+(see `AgmenteUITests/AGENTS.md`). Run the UI suite locally when touching UI
+flows — select the `Agmente` scheme in Xcode and ⌘U, or:
+
+```bash
+xcodebuild test -project Agmente.xcodeproj -scheme Agmente \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:AgmenteUITests CODE_SIGNING_ALLOWED=NO
+```
 
 ## TestFlight release setup (one-time, manual)
 
