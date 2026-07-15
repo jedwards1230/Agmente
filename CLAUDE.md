@@ -2,6 +2,14 @@
 
 This file is the entrypoint for cloud/Claude coding agents. Use it with `Agents.md`.
 
+## Fork meta
+
+This is a downstream fork. Branch model, which branches build/dispatch
+(`fork` = build + TestFlight; `main` = upstream mirror), the upstream
+contribution workflow, and the ACP backlog live in:
+
+@docs/FORK.md
+
 ## Read Order
 1. `Agents.md` (root policy and protocol overview)
 2. Component docs closest to changed code:
