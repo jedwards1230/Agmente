@@ -428,8 +428,11 @@ private extension SessionDetailView {
 
                 // Image attachment button
                 imageAttachmentButton
-                
+
                 Spacer()
+
+                // Context-window usage / cost (shown once the agent reports it)
+                usageBadge
             }
             .padding(.horizontal, 10)
 
@@ -1092,6 +1095,62 @@ private extension SessionDetailView {
             return mode.name
         }
         return sessionViewModel.availableModes.first?.name ?? "Mode"
+    }
+
+    /// Compact, read-only context-window usage / cost readout, driven by ACP `usage_update`.
+    @ViewBuilder
+    var usageBadge: some View {
+        if let usage = sessionViewModel.usage {
+            HStack(spacing: 5) {
+                Image(systemName: "gauge.with.dots.needle.33percent")
+                    .font(.caption2.weight(.semibold))
+                Text(usageLabel(usage))
+                    .font(.caption2.weight(.medium))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color(.systemGray5))
+            .foregroundStyle(.secondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("acp-usage-badge")
+            .accessibilityLabel(usageAccessibilityLabel(usage))
+        }
+    }
+
+    private func usageLabel(_ usage: ACPUsageInfo) -> String {
+        var parts: [String] = []
+        if let fraction = usage.fraction {
+            parts.append("\(Int((fraction * 100).rounded()))%")
+        }
+        if let cost = usage.cost {
+            parts.append(formatUsageCost(cost))
+        }
+        if parts.isEmpty {
+            parts.append("\(usage.used) tok")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func usageAccessibilityLabel(_ usage: ACPUsageInfo) -> String {
+        var text = "Context \(usage.used) of \(usage.size) tokens"
+        if let fraction = usage.fraction {
+            text += " (\(Int((fraction * 100).rounded())) percent)"
+        }
+        if let cost = usage.cost {
+            text += ", cost \(formatUsageCost(cost))"
+        }
+        return text
+    }
+
+    private func formatUsageCost(_ cost: ACPUsageCost) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = cost.currency
+        formatter.maximumFractionDigits = cost.amount < 1 ? 4 : 2
+        return formatter.string(from: NSNumber(value: cost.amount))
+            ?? String(format: "%.2f %@", cost.amount, cost.currency)
     }
 
     @ViewBuilder

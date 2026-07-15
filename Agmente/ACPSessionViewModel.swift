@@ -77,6 +77,8 @@ final class ACPSessionViewModel: ObservableObject {
     @Published private(set) var supportsImageAttachment: Bool = false
     @Published private(set) var chatMessages: [ChatMessage] = []
     @Published private(set) var stopReason: String = ""
+    /// Latest context-window usage / cost reported by the agent via `usage_update`.
+    @Published private(set) var usage: ACPUsageInfo?
 
     weak var cacheDelegate: ACPSessionCacheDelegate?
     weak var eventDelegate: ACPSessionEventDelegate?
@@ -711,6 +713,9 @@ final class ACPSessionViewModel: ObservableObject {
                 sessionId: sessionId
             )
             dependencies.append("Available commands updated (\(commands.count))")
+
+        case .usageUpdate(let info):
+            usage = info
         }
     }
 
@@ -1125,6 +1130,7 @@ final class ACPSessionViewModel: ObservableObject {
     func resetChatState() {
         chatMessages = []
         stopReason = ""
+        usage = nil
         streamingMessageId = nil
         currentServerId = nil
         currentSessionId = nil

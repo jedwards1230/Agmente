@@ -272,6 +272,100 @@ final class SessionUpdateHandlerTests: XCTestCase {
         XCTAssertNil(commands[1].inputHint)
     }
     
+    // MARK: - Usage Update Tests
+
+    func testUsageUpdateWithCost() throws {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("usage_update"),
+                "used": .int(12000),
+                "size": .int(200000),
+                "cost": .object([
+                    "amount": .double(0.0342),
+                    "currency": .string("USD")
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .usageUpdate(let info) = events[0] else {
+            XCTFail("Expected usageUpdate event")
+            return
+        }
+        XCTAssertEqual(info.used, 12000)
+        XCTAssertEqual(info.size, 200000)
+        XCTAssertEqual(info.cost?.amount, 0.0342)
+        XCTAssertEqual(info.cost?.currency, "USD")
+        let fraction = try XCTUnwrap(info.fraction)
+        XCTAssertEqual(fraction, 0.06, accuracy: 0.0001)
+    }
+
+    func testUsageUpdateWithoutCost() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("usage_update"),
+                "used": .int(50),
+                "size": .int(100)
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .usageUpdate(let info) = events[0] else {
+            XCTFail("Expected usageUpdate event")
+            return
+        }
+        XCTAssertEqual(info.used, 50)
+        XCTAssertEqual(info.size, 100)
+        XCTAssertNil(info.cost)
+        XCTAssertEqual(info.fraction, 0.5)
+    }
+
+    func testUsageUpdateMissingRequiredFieldIsDropped() {
+        // `size` is required by the ACP schema; without it the update is ignored.
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("usage_update"),
+                "used": .int(12000)
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 0)
+    }
+
+    func testUsageUpdateIgnoresMalformedCost() {
+        // A partial `cost` object (missing currency) leaves cost nil but keeps the token counts.
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("usage_update"),
+                "used": .int(10),
+                "size": .int(100),
+                "cost": .object([
+                    "amount": .double(1.5)
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .usageUpdate(let info) = events[0] else {
+            XCTFail("Expected usageUpdate event")
+            return
+        }
+        XCTAssertEqual(info.used, 10)
+        XCTAssertNil(info.cost)
+    }
+
     // MARK: - Session Filtering Tests
     
     func testFiltersByActiveSession() {
