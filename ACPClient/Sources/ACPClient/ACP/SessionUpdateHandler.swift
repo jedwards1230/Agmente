@@ -31,6 +31,55 @@ public enum ACPSessionUpdateEvent: Equatable, Sendable {
 
     /// Context-window usage and cost for the session have been updated.
     case usageUpdate(ACPUsageInfo)
+
+    /// Session metadata (title / last-activity timestamp) has been updated.
+    case sessionInfoUpdate(ACPSessionInfo)
+}
+
+// MARK: - Session Info Model
+
+/// Session metadata carried by a `session_info_update` notification.
+///
+/// All fields are optional (the notification supports partial updates). A field
+/// that is present but null in the payload is an explicit *clear*, which is
+/// distinct from an absent field — use the `has…` flags to tell them apart so a
+/// consumer never wipes a value the update did not mention.
+///
+/// Note: this notification does not carry `cwd`. The working directory lives on
+/// the `SessionInfo` returned by `session/list`, not here.
+public struct ACPSessionInfo: Equatable, Sendable {
+    /// New human-readable title. `nil` means the field was absent or explicitly
+    /// cleared — disambiguate with ``hasTitle``.
+    public let title: String?
+
+    /// Whether the update included a `title` field (present, possibly null).
+    public let hasTitle: Bool
+
+    /// ISO 8601 timestamp of last activity, as sent. `nil` means the field was
+    /// absent or explicitly cleared — disambiguate with ``hasUpdatedAt``.
+    public let updatedAt: String?
+
+    /// Whether the update included an `updatedAt` field (present, possibly null).
+    public let hasUpdatedAt: Bool
+
+    public init(title: String?, hasTitle: Bool, updatedAt: String?, hasUpdatedAt: Bool) {
+        self.title = title
+        self.hasTitle = hasTitle
+        self.updatedAt = updatedAt
+        self.hasUpdatedAt = hasUpdatedAt
+    }
+
+    /// ``updatedAt`` parsed as a `Date`, when it is a valid ISO 8601 timestamp.
+    /// Accepts timestamps with or without fractional seconds.
+    public var updatedAtDate: Date? {
+        guard let updatedAt else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: updatedAt) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: updatedAt)
+    }
 }
 
 // MARK: - Tool Call Models
@@ -196,6 +245,10 @@ public final class ACPSessionUpdateHandler: Sendable {
             guard let info = parseUsageInfo(from: update) else { return [] }
             return [.usageUpdate(info)]
 
+        case "session_info_update":
+            guard let info = parseSessionInfo(from: update) else { return [] }
+            return [.sessionInfoUpdate(info)]
+
         default:
             // Unknown kind - try to extract text as fallback
             let text = ACPSessionUpdateParser.extractText(from: update)
@@ -253,6 +306,23 @@ public final class ACPSessionUpdateHandler: Sendable {
         }
 
         return ACPUsageInfo(used: used, size: size, cost: cost)
+    }
+
+    private func parseSessionInfo(from update: [String: ACP.Value]) -> ACPSessionInfo? {
+        // A key present in the payload — even as JSON null — signals intent to
+        // set/clear that field. An absent key must leave the value untouched.
+        let hasTitle = update["title"] != nil
+        let hasUpdatedAt = update["updatedAt"] != nil
+
+        // Nothing actionable if the update mentions neither metadata field.
+        guard hasTitle || hasUpdatedAt else { return nil }
+
+        return ACPSessionInfo(
+            title: update["title"]?.stringValue,
+            hasTitle: hasTitle,
+            updatedAt: update["updatedAt"]?.stringValue,
+            hasUpdatedAt: hasUpdatedAt
+        )
     }
 
     private func parseAvailableCommands(from update: [String: ACP.Value]) -> [SessionCommand] {

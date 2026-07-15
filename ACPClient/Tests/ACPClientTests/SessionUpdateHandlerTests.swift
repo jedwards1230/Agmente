@@ -366,6 +366,89 @@ final class SessionUpdateHandlerTests: XCTestCase {
         XCTAssertNil(info.cost)
     }
 
+    // MARK: - Session Info Update Tests
+
+    func testSessionInfoUpdateTitleAndTimestamp() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("session_info_update"),
+                "title": .string("Refactor auth flow"),
+                "updatedAt": .string("2026-07-15T17:46:00Z")
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .sessionInfoUpdate(let info) = events[0] else {
+            XCTFail("Expected sessionInfoUpdate event")
+            return
+        }
+        XCTAssertEqual(info.title, "Refactor auth flow")
+        XCTAssertTrue(info.hasTitle)
+        XCTAssertEqual(info.updatedAt, "2026-07-15T17:46:00Z")
+        XCTAssertTrue(info.hasUpdatedAt)
+        XCTAssertNotNil(info.updatedAtDate)
+    }
+
+    func testSessionInfoUpdateTitleOnlyLeavesTimestampUntouched() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("session_info_update"),
+                "title": .string("Just a title")
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .sessionInfoUpdate(let info) = events[0] else {
+            XCTFail("Expected sessionInfoUpdate event")
+            return
+        }
+        XCTAssertEqual(info.title, "Just a title")
+        XCTAssertTrue(info.hasTitle)
+        XCTAssertNil(info.updatedAt)
+        XCTAssertFalse(info.hasUpdatedAt)
+    }
+
+    func testSessionInfoUpdateNullTitleSignalsClear() {
+        // A present-but-null field is an explicit clear, distinct from absent.
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("session_info_update"),
+                "title": .null
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .sessionInfoUpdate(let info) = events[0] else {
+            XCTFail("Expected sessionInfoUpdate event")
+            return
+        }
+        XCTAssertNil(info.title)
+        XCTAssertTrue(info.hasTitle, "A present null title should still be flagged as provided")
+        XCTAssertFalse(info.hasUpdatedAt)
+    }
+
+    func testSessionInfoUpdateWithoutFieldsIsDropped() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("session_info_update")
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 0)
+    }
+
     // MARK: - Session Filtering Tests
     
     func testFiltersByActiveSession() {

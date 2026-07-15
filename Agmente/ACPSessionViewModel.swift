@@ -57,6 +57,15 @@ protocol ACPSessionEventDelegate: AnyObject {
 
     /// Called when session load completes and streaming should finish.
     func sessionLoadDidComplete(serverId: UUID, sessionId: String)
+
+    /// Called when session metadata (title / last-activity timestamp) is updated
+    /// via a `session_info_update` notification. Optional — defaults to a no-op
+    /// for delegates that don't surface a session list.
+    func sessionInfoDidUpdate(_ info: ACPSessionInfo, serverId: UUID, sessionId: String)
+}
+
+extension ACPSessionEventDelegate {
+    func sessionInfoDidUpdate(_ info: ACPSessionInfo, serverId: UUID, sessionId: String) {}
 }
 
 @MainActor
@@ -716,6 +725,13 @@ final class ACPSessionViewModel: ObservableObject {
 
         case .usageUpdate(let info):
             usage = info
+
+        case .sessionInfoUpdate(let info):
+            // Session title / activity lives on the session list, not this VM —
+            // forward to the delegate that owns the summaries.
+            if let serverId = serverId {
+                eventDelegate?.sessionInfoDidUpdate(info, serverId: serverId, sessionId: sessionId)
+            }
         }
     }
 
