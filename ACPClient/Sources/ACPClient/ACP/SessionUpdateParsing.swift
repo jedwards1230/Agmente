@@ -46,6 +46,10 @@ public enum ACPSessionUpdateParser {
             case "config_option_update":
                 let options = ACPSessionConfigOptionParser.parse(from: update)
                 return "session/update [\(session)] config options updated (\(options.count))"
+            case "usage_update":
+                let used = update["used"]?.intValue ?? 0
+                let size = update["size"]?.intValue ?? 0
+                return "session/update [\(session)] usage: \(used)/\(size) tokens"
             default:
                 break
             }

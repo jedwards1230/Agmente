@@ -28,6 +28,9 @@ public enum ACPSessionUpdateEvent: Equatable, Sendable {
     
     /// Available slash commands have been updated.
     case availableCommandsUpdate(commands: [SessionCommand])
+
+    /// Context-window usage and cost for the session have been updated.
+    case usageUpdate(ACPUsageInfo)
 }
 
 // MARK: - Tool Call Models
@@ -61,6 +64,46 @@ public struct ACPToolCallUpdate: Equatable, Sendable {
         self.title = title
         self.kind = kind
         self.output = output
+    }
+}
+
+// MARK: - Usage Models
+
+/// Context-window usage and cumulative cost from a `usage_update` session update.
+///
+/// Mirrors the ACP `UsageUpdate` schema: `used` and `size` are token counts and
+/// are always present; `cost` is reported only by agents that track it.
+public struct ACPUsageInfo: Equatable, Sendable {
+    /// Tokens currently in the context window.
+    public let used: Int
+    /// Total context window size, in tokens.
+    public let size: Int
+    /// Cumulative session cost, if the agent reports it.
+    public let cost: ACPUsageCost?
+
+    public init(used: Int, size: Int, cost: ACPUsageCost? = nil) {
+        self.used = used
+        self.size = size
+        self.cost = cost
+    }
+
+    /// Fraction of the context window in use (0...1), or nil if `size` is 0.
+    public var fraction: Double? {
+        guard size > 0 else { return nil }
+        return Double(used) / Double(size)
+    }
+}
+
+/// Cumulative session cost reported by a `usage_update` (ACP `Cost` schema).
+public struct ACPUsageCost: Equatable, Sendable {
+    /// Total cumulative cost for the session.
+    public let amount: Double
+    /// ISO 4217 currency code (e.g. "USD").
+    public let currency: String
+
+    public init(amount: Double, currency: String) {
+        self.amount = amount
+        self.currency = currency
     }
 }
 
@@ -148,7 +191,11 @@ public final class ACPSessionUpdateHandler: Sendable {
         case "available_commands_update":
             let commands = parseAvailableCommands(from: update)
             return [.availableCommandsUpdate(commands: commands)]
-            
+
+        case "usage_update":
+            guard let info = parseUsageInfo(from: update) else { return [] }
+            return [.usageUpdate(info)]
+
         default:
             // Unknown kind - try to extract text as fallback
             let text = ACPSessionUpdateParser.extractText(from: update)
@@ -191,6 +238,23 @@ public final class ACPSessionUpdateHandler: Sendable {
         )
     }
     
+    private func parseUsageInfo(from update: [String: ACP.Value]) -> ACPUsageInfo? {
+        // `used` and `size` are required by the ACP schema; drop the update if either is absent.
+        guard let used = update["used"]?.intValue,
+              let size = update["size"]?.intValue else {
+            return nil
+        }
+
+        var cost: ACPUsageCost?
+        if let costObject = update["cost"]?.objectValue,
+           let amount = costObject["amount"]?.doubleValue,
+           let currency = costObject["currency"]?.stringValue {
+            cost = ACPUsageCost(amount: amount, currency: currency)
+        }
+
+        return ACPUsageInfo(used: used, size: size, cost: cost)
+    }
+
     private func parseAvailableCommands(from update: [String: ACP.Value]) -> [SessionCommand] {
         guard case let .array(commandValues)? = update["availableCommands"] else { return [] }
         
