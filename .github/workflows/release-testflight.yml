@@ -1,7 +1,8 @@
 name: Release (TestFlight internal)
+run-name: TestFlight upload from ${{ github.ref_name }} (run ${{ github.run_number }})
 
-# SCAFFOLD — archives the app, signs it with App Store Connect cloud-managed
-# signing, and uploads the build to TestFlight internal testing.
+# Archives the app, signs it with App Store Connect cloud-managed signing, and
+# uploads the build to TestFlight internal testing.
 #
 # This workflow CANNOT run until the repo owner provisions the secrets listed
 # under "Required secrets" below and creates the matching app record in App
@@ -51,6 +52,18 @@ jobs:
       - name: Show toolchain
         run: xcodebuild -version
 
+      - name: Compute build number
+        # TestFlight rejects a re-uploaded build number, so every upload needs a
+        # unique, strictly-increasing CFBundleVersion. github.run_number is
+        # monotonic per workflow; the 60000 base keeps it above any build number
+        # already committed in the project (currently 58). It only resets if this
+        # workflow file is deleted/recreated — don't do that, or bump the base.
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$(( 60000 + GITHUB_RUN_NUMBER ))"
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "${GITHUB_ENV}"
+          echo "Using CFBundleVersion (build number): ${BUILD_NUMBER}"
+
       - name: Configure signing team
         env:
           AGMENTE_DEVELOPMENT_TEAM: ${{ secrets.AGMENTE_DEVELOPMENT_TEAM }}
@@ -84,6 +97,7 @@ jobs:
             -configuration "${CONFIGURATION}" \
             -destination "generic/platform=iOS" \
             -archivePath "${ARCHIVE_PATH}" \
+            CURRENT_PROJECT_VERSION="${BUILD_NUMBER}" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "${ASC_KEY_PATH}" \
             -authenticationKeyID "${ASC_KEY_ID}" \
@@ -130,3 +144,18 @@ jobs:
           issuer-id: ${{ secrets.ASC_ISSUER_ID }}
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### TestFlight upload"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Source | \`${GITHUB_REF_NAME}\` |"
+            echo "| Build number | \`${BUILD_NUMBER:-unknown}\` |"
+            echo "| Result | ${{ job.status }} |"
+            echo ""
+            echo "Once processing completes, the build appears under **TestFlight → Builds** in App Store Connect and rolls out to testers."
+          } >> "${GITHUB_STEP_SUMMARY}"
