@@ -5,6 +5,13 @@ name: CI
 # the simulator build disables code signing, so the PR lane never touches the
 # App Store Connect / TestFlight credentials used by release-testflight.yml.
 
+# CI always triggers so every push/PR gets a visible run; a fast `changes` job
+# then decides whether the expensive macos-26 iOS build is needed. Docs and
+# repo-meta changes (markdown, docs/, LICENSE, .github/) skip the build job —
+# it reports "skipped" instead of the whole workflow silently not running, so
+# a docs PR still shows green CI and a skipped job satisfies any future
+# required-check rule. Unknown diff base (force-push, first push) fails open:
+# the build runs.
 on:
   push:
     branches: [fork]
@@ -19,8 +26,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.detect.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Detect code changes
+        id: detect
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -u
+          # Paths that never affect the app build.
+          IGNORE_RE='\.md$|^docs/|^\.github/|^LICENSE$'
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            files=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          elif [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+            files=$(git diff --name-only "$BEFORE_SHA" HEAD)
+          else
+            # Unknown base (force-push / first push): fail open, run the build.
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "Diff base unknown — running the build." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # String test rather than grep exit codes: `grep -qv` on empty input
+          # is platform-dependent (BSD exits 0, GNU exits 1).
+          code_files=$(echo "$files" | grep -v '^$' | grep -vE "$IGNORE_RE" || true)
+          if [ -n "$code_files" ]; then
+            code=true
+          else
+            code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          {
+            echo "**Build needed:** $code"
+            echo ""
+            echo '```'
+            echo "$files"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build-test:
     name: Build & test (iOS Simulator, unsigned)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # macos-26 (Xcode 26 default) is required: the app uses iOS 26 SDK APIs
     # (Liquid Glass `.glassEffect`, `DefaultToolbarItem`) even though it deploys
     # back to iOS 18, so it will not compile against the Xcode 16 SDK on macos-15.
@@ -32,7 +93,7 @@ jobs:
       SIMULATOR_NAME: iPhone 17
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Show toolchain
         run: |
@@ -73,7 +134,7 @@ jobs:
 
       - name: Upload test results
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-results
           path: TestResults.xcresult
