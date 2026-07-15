@@ -1416,4 +1416,21 @@ extension ServerViewModel: ACPSessionEventDelegate {
         connectionManager.markSessionMaterialized(sessionId)
         lastLoadedSession = sessionId
     }
+
+    func sessionInfoDidUpdate(_ info: ACPSessionInfo, serverId: UUID, sessionId: String) {
+        guard let index = sessionSummaries.firstIndex(where: { $0.id == sessionId }) else { return }
+        let existing = sessionSummaries[index]
+        // Only overwrite fields the update actually carried; a present-null
+        // title is an explicit clear, an absent field leaves the value alone.
+        let newTitle = info.hasTitle ? info.title : existing.title
+        let newUpdatedAt = info.hasUpdatedAt ? (info.updatedAtDate ?? existing.updatedAt) : existing.updatedAt
+        guard newTitle != existing.title || newUpdatedAt != existing.updatedAt else { return }
+        sessionSummaries[index] = SessionSummary(
+            id: existing.id,
+            title: newTitle,
+            cwd: existing.cwd,
+            updatedAt: newUpdatedAt
+        )
+        setSessionSummaries(sessionSummaries) // Trigger UI update
+    }
 }

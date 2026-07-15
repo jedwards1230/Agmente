@@ -50,6 +50,9 @@ public enum ACPSessionUpdateParser {
                 let used = update["used"]?.intValue ?? 0
                 let size = update["size"]?.intValue ?? 0
                 return "session/update [\(session)] usage: \(used)/\(size) tokens"
+            case "session_info_update":
+                let title = update["title"]?.stringValue
+                return "session/update [\(session)] info: \(title ?? "(untitled)")"
             default:
                 break
             }
