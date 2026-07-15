@@ -51,6 +51,41 @@ Agmente user benefits from (ACP handling, UI bugs, crashes). Fork-identity
 commits (bundle ID, TestFlight workflow) stay in the fork and are never
 proposed upstream.
 
+### Working on upstreamable features
+
+Two kinds of work flow differently — keep them in **separate commits**, always
+(never mix a fork-identity change with a feature change):
+
+| Lane | Examples | Base branch | Upstream? |
+| ---- | -------- | ----------- | --------- |
+| **Fork infra / identity** | bundle ID, CI, TestFlight, this doc | `fork` | Never |
+| **Upstreamable feature** | ACP handling, UI / crash fixes | `main` | Yes, eventually |
+
+Give each upstreamable feature its **own branch off `main`** (`feat/…`),
+self-contained. Merge it into `fork` for daily use; when it's proven, that same
+branch **is** the upstream PR — no cherry-picking. Because the branch is
+`main`-based, its PR diffs against upstream's *current* tree, so upstream churn
+becomes a normal rebase instead of fork divergence.
+
+**Keep the app-layer touch minimal.** The connection / view-model layer
+(`AppViewModel` → `ServerViewModel`) is mid-migration in upstream's code. The
+more a change stays in the `ACPClient/` package (typed payloads, parsers,
+`ACPSessionUpdateEvent`), the more cleanly it rebases and reviews. Adding an
+inbound session update is one enum case in the package + one arm in the
+`ACPSessionViewModel` switch — additive and low-conflict.
+
+**Sequencing while that migration is in flight:**
+
+- **Inbound update / content + wire-shape** work — new `session/update`
+  variants, `ContentBlock` decoding, conforming existing session methods to the
+  stable ACP v1 shapes. Package-heavy, low conflict. **Safe now.**
+- **Outbound lifecycle methods** — `session/close`, `logout`, `session/delete`.
+  Call sites live in the churny connection layer. **Defer** until the migration
+  settles.
+
+The current backlog and per-PR breakdown live in
+[`acp-upstream-backlog.md`](acp-upstream-backlog.md).
+
 ## Fork identity
 
 | What | Value | Where to change |
