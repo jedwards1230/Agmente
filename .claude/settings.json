@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(swift:*)",
+      "Bash(swiftlint:*)",
+      "Bash(swiftformat:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun simctl list:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run view:*)"
+    ]
+  },
+  "enabledPlugins": {
+    "swift-quality@jedwards1230-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "jedwards1230-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "jedwards1230/claude-plugins"
+      }
+    }
+  }
+}
