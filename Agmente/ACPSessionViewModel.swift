@@ -79,6 +79,13 @@ final class ACPSessionViewModel: ObservableObject {
     @Published private(set) var currentModeId: String?
     @Published private(set) var availableModes: [AgentModeOption] = []
     @Published private(set) var sessionConfigOptions: [ACPSessionConfigOption] = []
+    /// Models discovered via the gofer-native `gofer/models` request. Empty when
+    /// the connected agent doesn't answer `gofer/models`, which hides the model
+    /// picker (graceful degradation for spec-general ACP agents).
+    @Published private(set) var availableModels: [GoferModel] = []
+    /// The model id selected in this app session, applied via the spec method
+    /// `session/set_config_option`. Distinct from mode selection.
+    @Published private(set) var selectedModelId: String?
     @Published private(set) var availableCommands: [SessionCommand] = []
     @Published var promptText: String = ""
     @Published var selectedCommandName: String?
@@ -186,10 +193,76 @@ final class ACPSessionViewModel: ObservableObject {
                 cacheCurrentMode(serverId: serverId, sessionId: sessionId)
             }
         }
+
+        // Adopt the agent-reported current model, if it surfaces one as a config
+        // option, so the picker reflects it.
+        if let modelValue = options.first(where: { $0.id == GoferModelConfig.configId })?.currentValue.stringValue,
+           !modelValue.isEmpty {
+            selectedModelId = modelValue
+        }
     }
 
     func visibleConfigOptions() -> [ACPSessionConfigOption] {
-        sessionConfigOptions.filter { !$0.isModeSelector }
+        sessionConfigOptions.filter { option in
+            if option.isModeSelector { return false }
+            // The dedicated gofer model picker owns the "model" option when
+            // discovery succeeded; otherwise fall back to rendering it here.
+            if !availableModels.isEmpty && option.id == GoferModelConfig.configId { return false }
+            return true
+        }
+    }
+
+    // MARK: - Model Discovery & Selection
+
+    /// The active model id: the local selection, else an agent-reported "model"
+    /// config option value.
+    var currentModelId: String? {
+        selectedModelId
+            ?? sessionConfigOptions.first(where: { $0.id == GoferModelConfig.configId })?.currentValue.stringValue
+    }
+
+    /// The active model resolved against the discovered list, when available.
+    var currentModel: GoferModel? {
+        guard let id = currentModelId else { return nil }
+        return availableModels.first(where: { $0.id == id })
+    }
+
+    /// Discovers available models via the gofer-native `gofer/models` request.
+    ///
+    /// `gofer/models` is not an ACP spec method; when the connected agent
+    /// doesn't implement it the request throws and we clear `availableModels`,
+    /// hiding the model picker. The app keeps working as a spec-general ACP
+    /// client (graceful degradation).
+    func discoverModels() {
+        guard let service = dependencies.getService() else {
+            availableModels = []
+            return
+        }
+        Task { @MainActor in
+            do {
+                availableModels = try await service.listGoferModels()
+            } catch {
+                // Non-gofer agent (or `gofer/models` unsupported): hide the picker.
+                availableModels = []
+            }
+        }
+    }
+
+    /// Applies a model selection via the spec method
+    /// `session/set_config_option` (`configId: "model"`). Discovery is
+    /// gofer-native; *setting* stays spec-general.
+    func sendSetModel(
+        _ modelId: String,
+        sessionId: String,
+        serverId: UUID?
+    ) {
+        selectedModelId = modelId
+        sendSetConfigOption(
+            configId: GoferModelConfig.configId,
+            value: .string(modelId),
+            sessionId: sessionId,
+            serverId: serverId
+        )
     }
 
     func cacheCurrentMode(serverId: UUID?, sessionId: String) {

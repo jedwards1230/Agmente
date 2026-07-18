@@ -1,4 +1,5 @@
 import SwiftUI
+import ACPClient
 
 struct SessionSidebarView: View {
     @ObservedObject var model: AppViewModel
@@ -173,7 +174,7 @@ private extension SessionSidebarView {
                         } label: {
                             SessionCard(
                                 title: session.title ?? "New Chat",
-                                subtitle: "Session",
+                                subtitle: sessionSubtitle(for: session),
                                 isSelected: serverViewModel.selectedSessionId == session.id,
                                 isDimmed: model.connectionState != .connected
                             )
@@ -193,6 +194,15 @@ private extension SessionSidebarView {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Prefers the session's working directory (from `SessionInfo`) as the card
+    /// subtitle, falling back to a generic label when none is reported.
+    func sessionSubtitle(for session: SessionSummary) -> String {
+        if let cwd = session.cwd, !cwd.isEmpty {
+            return cwd
+        }
+        return "Session"
     }
 
     var logSection: some View {

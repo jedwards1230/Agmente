@@ -406,6 +406,11 @@ private extension SessionDetailView {
                     modePicker
                 }
 
+                // Model picker (only when gofer-native discovery succeeded)
+                if !sessionViewModel.availableModels.isEmpty {
+                    modelPicker
+                }
+
                 ForEach(sessionViewModel.visibleConfigOptions(), id: \.id) { option in
                     configOptionControl(for: option)
                 }
@@ -1095,6 +1100,60 @@ private extension SessionDetailView {
             return mode.name
         }
         return sessionViewModel.availableModes.first?.name ?? "Mode"
+    }
+
+    /// Model picker fed by gofer-native `gofer/models` discovery. Selecting a
+    /// model applies it via the spec method `session/set_config_option`.
+    var modelPicker: some View {
+        Menu {
+            ForEach(sessionViewModel.availableModels) { modelOption in
+                Button {
+                    sessionViewModel.sendSetModel(
+                        modelOption.id,
+                        sessionId: serverViewModel.sessionId,
+                        serverId: model.selectedServerId
+                    )
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(modelOption.displayName)
+                            if let provider = modelOption.provider, !provider.isEmpty {
+                                Text(provider)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if sessionViewModel.currentModelId == modelOption.id {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+                .disabled(!modelOption.available)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "cpu")
+                    .font(.footnote.weight(.semibold))
+                Text(currentModelName)
+                    .font(.footnote.weight(.medium))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color(.systemGray5))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .menuStyle(.borderlessButton)
+        .accessibilityIdentifier("acp-model-picker")
+    }
+
+    var currentModelName: String {
+        if let model = sessionViewModel.currentModel {
+            return model.displayName
+        }
+        return sessionViewModel.availableModels.first?.displayName ?? "Model"
     }
 
     /// Compact, read-only context-window usage / cost readout, driven by ACP `usage_update`.

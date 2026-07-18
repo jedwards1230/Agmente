@@ -90,6 +90,18 @@ public final class ACPService {
         try await sendRequest(method: method, params: params)
     }
 
+    /// Discovers the models the connected **gofer** daemon can run via the
+    /// gofer-native `gofer/models` request.
+    ///
+    /// > Warning: This is **not** an ACP spec method. Callers must treat a
+    /// > thrown error (e.g. `-32601` method-not-found from a non-gofer agent) as
+    /// > "model discovery unavailable" and degrade gracefully. An empty array
+    /// > means the daemon reported no models — never a substitute for the error.
+    public func listGoferModels() async throws -> [GoferModel] {
+        let response = try await call(method: GoferMethods.models)
+        return GoferModelsParser.parse(from: response.resultValue)
+    }
+
     private func sendRequest(method: String, params: ACP.Value?) async throws -> ACP.AnyResponse {
         guard case .disconnected = client.state else {
             // allow if already connected or connecting

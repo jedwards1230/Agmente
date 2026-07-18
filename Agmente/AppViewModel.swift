@@ -2234,6 +2234,11 @@ final class AppViewModel: ObservableObject, ACPClientManagerDelegate, ACPSession
                 }
                 append("Modes: \(agentInfo.modes.map { $0.name }.joined(separator: ", ")), current: \(sessionViewModel?.currentModeId ?? "none")")
             }
+
+            // Discover models via the gofer-native `gofer/models` request. This
+            // is best-effort: non-gofer agents don't answer it and the picker
+            // stays hidden (graceful degradation).
+            sessionViewModel?.discoverModels()
         }
 
         objectWillChange.send()

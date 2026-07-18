@@ -652,4 +652,42 @@ final class ACPSessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableCommands.count, 1)
         XCTAssertEqual(viewModel.availableCommands.first?.name, "test-command")
     }
+
+    // MARK: - Model Picker (gofer/models discovery + graceful degradation)
+
+    func testDiscoverModels_WithoutService_HidesPicker() {
+        // No connected service (e.g. a non-gofer agent path never reaches
+        // discovery, or the connection dropped) → the picker stays hidden.
+        let viewModel = makeViewModel(service: nil)
+        viewModel.discoverModels()
+        XCTAssertTrue(viewModel.availableModels.isEmpty)
+    }
+
+    func testVisibleConfigOptions_ShowsModelOptionWhenDiscoveryEmpty() {
+        // Graceful degradation: when gofer/models yields nothing, an agent's own
+        // "model" select still renders through the generic config-option control.
+        let viewModel = makeViewModel()
+        let modelOption = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [ACPSessionConfigOptionChoice(id: "m1", name: "Model 1")]),
+            currentValue: .string("m1")
+        )
+        viewModel.applySessionConfigOptions([modelOption], serverId: UUID(), sessionId: "s1")
+
+        XCTAssertTrue(viewModel.availableModels.isEmpty)
+        XCTAssertTrue(viewModel.visibleConfigOptions().contains(where: { $0.id == GoferModelConfig.configId }))
+        // The agent-reported current model is adopted.
+        XCTAssertEqual(viewModel.currentModelId, "m1")
+    }
+
+    func testSendSetModel_TracksSelectionOptimistically() {
+        // Applying a model records the selection locally; the wire request goes
+        // through the spec `session/set_config_option` path (encode verified in
+        // the ACPClient package tests).
+        let viewModel = makeViewModel(service: nil)
+        viewModel.sendSetModel("claude-opus", sessionId: "s1", serverId: UUID())
+        XCTAssertEqual(viewModel.selectedModelId, "claude-opus")
+        XCTAssertEqual(viewModel.currentModelId, "claude-opus")
+    }
 }
