@@ -1,0 +1,56 @@
+# Claude PR review — calls the shared reusable workflow in
+# jedwards1230/release-workflows (claude-code-action@v1, Haiku, review-team +
+# public marketplace + github_ci by default). The focus below is appended to
+# the base prompt.
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened, closed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  review:
+    if: github.event.action != 'closed'
+    uses: jedwards1230/release-workflows/.github/workflows/claude-pr-review.yml@v1
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # preferred (subscription)
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # fallback (metered API)
+    with:
+      draft_on_blocking: true
+      extra_plugins: |
+        swift-quality@jedwards1230-plugins
+      focus: |
+        Agmente is a SwiftUI macOS/iOS client (fork of rebornix/Agmente) that
+        drives coding agents over two protocol modes: ACP and the Codex
+        app-server. Protocol is detected after `initialize` and routed to
+        protocol-specific view models. Highest-value review lenses:
+        - Swift correctness/concurrency: actor isolation and @MainActor
+          boundaries, Sendable violations, retain cycles in closures/Combine
+          subscriptions, force-unwrap/try! on fallible paths.
+        - Protocol handling: keep ACP and Codex app-server paths separate unless
+          a shared abstraction is intentional and tested; flag leaked state
+          across a protocol switch and mis-decoded JSON-RPC messages.
+        - Process/stream lifecycle: agent subprocess spawn/teardown, stdout/
+          stderr stream parsing, partial vs settled message payloads, and
+          cancellation.
+        - No hardcoded personal/local filesystem paths in tracked files (use
+          the root `.agmente.paths` config); no committed secrets.
+        - UI: keep accessibility identifiers stable or update UI tests in the
+          same PR.
+        - When the diff touches Swift, prioritize the swift-quality:swift-reviewer
+          agent for language-specific review.
+        Do NOT re-flag swift-format/SwiftLint findings — CI owns those.
+
+  cancel-review:
+    if: github.event.action == 'closed'
+    permissions:
+      actions: write
+    uses: jedwards1230/release-workflows/.github/workflows/claude-pr-review-cancel.yml@v1
+    with:
+      review_workflow: "Claude PR Review"
