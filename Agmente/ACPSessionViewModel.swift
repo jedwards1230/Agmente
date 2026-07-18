@@ -697,7 +697,8 @@ final class ACPSessionViewModel: ObservableObject {
                 toolCallId: info.toolCallId,
                 title: info.title,
                 kind: info.kind,
-                status: info.status
+                status: info.status,
+                diffs: info.diffs
             )
 
         case .toolCallUpdate(let update):
@@ -787,6 +788,12 @@ final class ACPSessionViewModel: ObservableObject {
 
         if let output = update.output {
             chatMessages[index].segments[resolvedIndex].toolCall?.output = output
+        }
+
+        if !update.diffs.isEmpty {
+            // Updates carry the current full diff set; replace rather than append
+            // so repeated streaming updates don't duplicate entries.
+            chatMessages[index].segments[resolvedIndex].toolCall?.diffs = update.diffs
         }
 
         rebuildAssistantContent(at: index)
@@ -897,7 +904,7 @@ final class ACPSessionViewModel: ObservableObject {
         applyToolCallUpdate(update)
     }
 
-    private func appendToolCall(toolCallId: String?, title: String, kind: String?, status: String) {
+    private func appendToolCall(toolCallId: String?, title: String, kind: String?, status: String, diffs: [ACPToolCallDiff] = []) {
         let index = ensureStreamingAssistantMessage()
 
         if let toolCallId = toolCallId,
@@ -911,6 +918,9 @@ final class ACPSessionViewModel: ObservableObject {
                     existingToolCall.kind = kind
                 }
                 existingToolCall.status = status
+                if !diffs.isEmpty {
+                    existingToolCall.diffs = diffs
+                }
                 existingSegment.toolCall = existingToolCall
 
                 let summary: String
@@ -938,7 +948,7 @@ final class ACPSessionViewModel: ObservableObject {
         } else {
             summary = title
         }
-        let toolCall = ToolCallDisplay(toolCallId: toolCallId, title: title, kind: kind, status: status)
+        let toolCall = ToolCallDisplay(toolCallId: toolCallId, title: title, kind: kind, status: status, diffs: diffs)
         chatMessages[index].segments.append(AssistantSegment(kind: .toolCall, text: summary, toolCall: toolCall))
 
         if status == "in_progress" || status == "pending" {
