@@ -46,7 +46,7 @@ sequencing.
 
 | # | Branch | Scope | Status |
 | - | ------ | ----- | ------ |
-| 6 | `feat/acp-model-picker` | Feed the `session/new` model picker from gofer's native **list-models** endpoint (not `providers/list`) | todo |
+| 6 | `feat/acp-model-picker` | Feed the model picker from gofer's native **`gofer/models`** endpoint (not `providers/list`) | **done** — merged to `fork`. Discovery is gofer-native (`ACPService.listGoferModels` → `GoferModelsParser`); if the agent doesn't answer `gofer/models` the picker hides (graceful degradation). Applying a model uses the spec method `session/set_config_option` (`configId: "model"`), never a native set. |
 
 ## Outbound lifecycle (deferred until upstream's view-model migration settles)
 

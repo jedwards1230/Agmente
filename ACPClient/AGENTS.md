@@ -20,6 +20,14 @@ When adding ACP method support:
 4. Ensure delegate and pending-request behavior remain correct.
 5. Add package tests for success and failure paths.
 
+## gofer-native methods
+- Non-spec, gofer-only JSON-RPC methods live in `GoferMethods` (kept apart from
+  `ACPMethods`). Today: `gofer/models` (model discovery → `ACPService.listGoferModels`
+  / `GoferModelsParser`). Only use these where the caller degrades gracefully when
+  the agent doesn't implement them — a thrown RPC error means "unsupported".
+- Never apply state via a gofer-native method when a spec method exists: model
+  selection is applied over spec `session/set_config_option` (`configId: "model"`).
+
 ## Compatibility Rules
 - Preserve support for server-initiated JSON-RPC requests (do not treat as transport errors).
 - Keep slash-escaping compatibility option functional.
