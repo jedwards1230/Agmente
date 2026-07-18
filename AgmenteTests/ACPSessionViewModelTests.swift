@@ -878,6 +878,36 @@ final class ACPSessionViewModelTests: XCTestCase {
         XCTAssertEqual(choices.map(\.id), ["m2"])
     }
 
+    func testApplySessionConfigOptions_ModelLessSnapshotPreservesSelection() {
+        // A non-empty snapshot that OMITS the model option must NOT wipe the
+        // model selection — only a session switch/reset clears it. This pins the
+        // deliberate "don't clear selection when the model option is absent"
+        // behavior so a future refactor can't silently start wiping it.
+        let viewModel = makeViewModel()
+        let modelOption = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [ACPSessionConfigOptionChoice(id: "m1", name: "One")]),
+            currentValue: .string("m1")
+        )
+        viewModel.applySessionConfigOptions([modelOption], serverId: UUID(), sessionId: "s1")
+        XCTAssertEqual(viewModel.selectedModelId, "m1")
+
+        // New, non-empty snapshot with only an unrelated boolean option.
+        let boolOption = ACPSessionConfigOption(
+            id: "yolo",
+            name: "YOLO mode",
+            kind: .boolean,
+            currentValue: .bool(true)
+        )
+        viewModel.applySessionConfigOptions([boolOption], serverId: UUID(), sessionId: "s1")
+
+        // Selection survives; the config-option set is still REPLACED wholesale.
+        XCTAssertEqual(viewModel.selectedModelId, "m1")
+        XCTAssertEqual(viewModel.currentModelId, "m1")
+        XCTAssertEqual(viewModel.sessionConfigOptions.map(\.id), ["yolo"])
+    }
+
     func testLoadChatState_ResetsConfigOptionsAndModelSelection() {
         let viewModel = makeViewModel()
         let modelOption = ACPSessionConfigOption(

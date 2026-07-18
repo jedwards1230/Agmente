@@ -199,7 +199,10 @@ final class ACPSessionViewModel: ObservableObject {
         }
 
         // Adopt the agent-reported current model, if it surfaces one as a config
-        // option, so the picker reflects it.
+        // option, so the picker reflects it. Intentionally do NOT clear
+        // `selectedModelId` when the snapshot omits the model option — a
+        // defensive/partial snapshot must not wipe a live selection; only a
+        // session switch/reset (loadChatState/resetChatState) clears it.
         if let modelValue = options.first(where: { $0.id == GoferModelConfig.configId })?.currentValue.stringValue,
            !modelValue.isEmpty {
             selectedModelId = modelValue
