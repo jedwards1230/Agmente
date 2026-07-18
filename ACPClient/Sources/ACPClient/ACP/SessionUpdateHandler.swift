@@ -23,7 +23,9 @@ public enum ACPSessionUpdateEvent: Equatable, Sendable {
     /// The agent's current mode has changed.
     case modeChange(modeId: String)
 
-    /// Session config options changed.
+    /// The agent's config options changed. This is a full snapshot that
+    /// replaces any prior config-option set for the session; an empty array
+    /// means the agent advertises no config options.
     case configOptionsUpdate(options: [ACPSessionConfigOption])
     
     /// Available slash commands have been updated.
@@ -262,8 +264,10 @@ public final class ACPSessionUpdateHandler: Sendable {
             return []
 
         case "config_option_update":
+            // The agent advertises its full current config-option set as a
+            // snapshot; always emit (even when empty) so the consumer can
+            // replace or clear its set — mirrors the `plan` snapshot semantics.
             let options = ACPSessionConfigOptionParser.parse(from: update)
-            guard !options.isEmpty else { return [] }
             return [.configOptionsUpdate(options: options)]
             
         case "available_commands_update":
