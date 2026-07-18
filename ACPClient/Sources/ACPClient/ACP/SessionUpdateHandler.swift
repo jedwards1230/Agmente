@@ -38,13 +38,25 @@ public struct ACPToolCallInfo: Equatable, Sendable {
     public let title: String
     public let kind: String?
     public let status: String
-    
-    public init(toolCallId: String?, title: String, kind: String?, status: String) {
+    /// Typed content blocks attached to the tool call (e.g. structured diffs).
+    public let content: [ACPToolCallContent]
+
+    public init(
+        toolCallId: String?,
+        title: String,
+        kind: String?,
+        status: String,
+        content: [ACPToolCallContent] = []
+    ) {
         self.toolCallId = toolCallId
         self.title = title
         self.kind = kind
         self.status = status
+        self.content = content
     }
+
+    /// The structured file diffs attached to this tool call, in order.
+    public var diffs: [ACPToolCallDiff] { content.diffs }
 }
 
 /// Update to an existing tool call.
@@ -54,14 +66,27 @@ public struct ACPToolCallUpdate: Equatable, Sendable {
     public let title: String?
     public let kind: String?
     public let output: String?
-    
-    public init(toolCallId: String?, status: String?, title: String?, kind: String?, output: String?) {
+    /// Typed content blocks attached to the update (e.g. structured diffs).
+    public let content: [ACPToolCallContent]
+
+    public init(
+        toolCallId: String?,
+        status: String?,
+        title: String?,
+        kind: String?,
+        output: String?,
+        content: [ACPToolCallContent] = []
+    ) {
         self.toolCallId = toolCallId
         self.status = status
         self.title = title
         self.kind = kind
         self.output = output
+        self.content = content
     }
+
+    /// The structured file diffs attached to this update, in order.
+    public var diffs: [ACPToolCallDiff] { content.diffs }
 }
 
 // MARK: - Session Update Handler
@@ -166,12 +191,14 @@ public final class ACPSessionUpdateHandler: Sendable {
         let kind = ACPSessionUpdateParser.toolCallKind(from: update)
         let toolCallId = ACPSessionUpdateParser.toolCallId(from: update)
         let status = ACPSessionUpdateParser.toolCallStatus(from: update) ?? "pending"
-        
+        let content = ACPSessionUpdateParser.toolCallContent(from: update)
+
         return ACPToolCallInfo(
             toolCallId: toolCallId,
             title: title,
             kind: kind,
-            status: status
+            status: status,
+            content: content
         )
     }
     
@@ -181,13 +208,15 @@ public final class ACPSessionUpdateHandler: Sendable {
         let title = ACPSessionUpdateParser.toolCallUpdatedTitle(from: update)
         let kind = ACPSessionUpdateParser.toolCallUpdatedKind(from: update)
         let output = ACPSessionUpdateParser.toolCallOutput(from: update)
-        
+        let content = ACPSessionUpdateParser.toolCallContent(from: update)
+
         return ACPToolCallUpdate(
             toolCallId: toolCallId,
             status: status,
             title: title,
             kind: kind,
-            output: output
+            output: output,
+            content: content
         )
     }
     

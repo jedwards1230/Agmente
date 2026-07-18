@@ -2964,16 +2964,18 @@ struct CodableToolCall: Codable {
     let kind: String?
     let status: String?
     let output: String?
-    
+    let diffs: [ACPToolCallDiff]?
+
     init(from display: ToolCallDisplay) {
         self.toolCallId = display.toolCallId
         self.title = display.title
         self.kind = display.kind
         self.status = display.status
         self.output = display.output
+        self.diffs = display.diffs.isEmpty ? nil : display.diffs
         // Don't persist permission/approval data - they're transient
     }
-    
+
     func toToolCall() -> ToolCallDisplay {
         ToolCallDisplay(
             toolCallId: toolCallId,
@@ -2981,6 +2983,7 @@ struct CodableToolCall: Codable {
             kind: kind,
             status: status,
             output: output,
+            diffs: diffs ?? [],
             permissionOptions: nil,
             acpPermissionRequestId: nil,
             permissionRequestId: nil,
@@ -3020,6 +3023,8 @@ struct ToolCallDisplay: Equatable {
     var kind: String?
     var status: String?
     var output: String?
+    /// Structured file diffs decoded from the tool call's `diff` content blocks.
+    var diffs: [ACPToolCallDiff] = []
     var permissionOptions: [ACPPermissionOption]?
     var acpPermissionRequestId: ACP.ID?
     var permissionRequestId: JSONRPCID?

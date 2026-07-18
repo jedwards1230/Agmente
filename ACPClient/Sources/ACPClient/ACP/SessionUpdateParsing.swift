@@ -116,6 +116,39 @@ public enum ACPSessionUpdateParser {
         return text.isEmpty ? nil : text
     }
 
+    /// Decode the typed content blocks from a tool call's `content` array.
+    ///
+    /// Recognizes the `diff` variant (`{ type: "diff", path, oldText?, newText }`)
+    /// and text blocks (`{ type: "content", content: { text } }`). Unknown block
+    /// types are skipped. `oldText` absent maps to a file creation.
+    public static func toolCallContent(from update: [String: ACP.Value]) -> [ACPToolCallContent] {
+        guard case let .array(items)? = update["content"] else { return [] }
+
+        var blocks: [ACPToolCallContent] = []
+        blocks.reserveCapacity(items.count)
+
+        for element in items {
+            guard let object = element.objectValue else { continue }
+
+            switch object["type"]?.stringValue {
+            case "diff":
+                guard let path = object["path"]?.stringValue,
+                      let newText = object["newText"]?.stringValue else { continue }
+                let oldText = object["oldText"]?.stringValue
+                blocks.append(.diff(ACPToolCallDiff(path: path, oldText: oldText, newText: newText)))
+            default:
+                // "content" (wrapped text) blocks, or any legacy/flat text shape.
+                if let text = object["content"]?.objectValue?["text"]?.stringValue {
+                    blocks.append(.text(text))
+                } else if let text = object["text"]?.stringValue {
+                    blocks.append(.text(text))
+                }
+            }
+        }
+
+        return blocks
+    }
+
     private static func compactJSON(_ object: [String: ACP.Value]) -> String {
         let encoder = JSONEncoder()
         guard let data = try? encoder.encode(ACP.Value.object(object)),

@@ -1,4 +1,5 @@
 import SwiftUI
+import ACPClient
 
 struct FileChangeSummaryItem: Identifiable, Equatable {
     let id: String
@@ -7,6 +8,8 @@ struct FileChangeSummaryItem: Identifiable, Equatable {
     let verb: String?
     let status: String?
     let diff: String?
+    /// Structured diffs decoded from ACP `diff` content blocks, when present.
+    let diffs: [ACPToolCallDiff]
 }
 
 enum FileChangeSummary {
@@ -37,8 +40,10 @@ enum FileChangeSummary {
             let title = (segment.toolCall?.title ?? segment.text).trimmingCharacters(in: .whitespacesAndNewlines)
             let (verb, path) = parseTitle(title)
             let status = segment.toolCall?.status
-            let diff = segment.toolCall?.output?.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let diff, !diff.isEmpty else { continue }
+            let structuredDiffs = segment.toolCall?.diffs ?? []
+            let diffText = segment.toolCall?.output?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasDiffText = !(diffText?.isEmpty ?? true)
+            guard hasDiffText || !structuredDiffs.isEmpty else { continue }
             let id = segment.toolCall?.toolCallId ?? "\(path)-\(index)"
             items.append(
                 FileChangeSummaryItem(
@@ -47,7 +52,8 @@ enum FileChangeSummary {
                     path: path,
                     verb: verb,
                     status: status,
-                    diff: diff
+                    diff: hasDiffText ? diffText : nil,
+                    diffs: structuredDiffs
                 )
             )
         }
@@ -204,7 +210,11 @@ struct FileChangesReviewSheet: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if let diff = item.diff, !diff.isEmpty {
+                            if !item.diffs.isEmpty {
+                                ForEach(Array(item.diffs.enumerated()), id: \.offset) { _, diff in
+                                    ToolCallDiffView(diff: diff)
+                                }
+                            } else if let diff = item.diff, !diff.isEmpty {
                                 Text(diff)
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundStyle(.primary)

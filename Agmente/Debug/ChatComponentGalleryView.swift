@@ -145,7 +145,14 @@ private enum ChatComponentMockData {
             path: "Agmente/ChatRendering/ChatTranscriptContainerView.swift",
             verb: "update",
             status: "completed",
-            diff: "@@ -1,3 +1,8 @@\n+ Added preview-only gallery render path."
+            diff: nil,
+            diffs: [
+                ACPToolCallDiff(
+                    path: "Agmente/ChatRendering/ChatTranscriptContainerView.swift",
+                    oldText: "let title = \"Chat\"\nlet count = 1\nreturn title",
+                    newText: "let title = \"Chat\"\nlet count = 2\nreturn title"
+                )
+            ]
         ),
         FileChangeSummaryItem(
             id: "gallery-file-2",
@@ -153,7 +160,14 @@ private enum ChatComponentMockData {
             path: "Agmente/Debug/ChatComponentGalleryView.swift",
             verb: "create",
             status: "completed",
-            diff: "@@ -0,0 +1,180 @@\n+ Debug gallery with mock data."
+            diff: nil,
+            diffs: [
+                ACPToolCallDiff(
+                    path: "Agmente/Debug/ChatComponentGalleryView.swift",
+                    oldText: nil,
+                    newText: "import SwiftUI\n\nstruct ChatComponentGalleryView: View {\n    var body: some View { EmptyView() }\n}"
+                )
+            ]
         )
     ]
 
