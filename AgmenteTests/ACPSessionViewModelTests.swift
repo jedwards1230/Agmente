@@ -681,13 +681,124 @@ final class ACPSessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.currentModelId, "m1")
     }
 
-    func testSendSetModel_TracksSelectionOptimistically() {
-        // Applying a model records the selection locally; the wire request goes
-        // through the spec `session/set_config_option` path (encode verified in
-        // the ACPClient package tests).
+    func testSendSetModel_NotConnected_DoesNotShowPhantomModel() {
+        // Tapping a model while disconnected must not leave the picker showing a
+        // phantom active model — the selection is never applied.
         let viewModel = makeViewModel(service: nil)
         viewModel.sendSetModel("claude-opus", sessionId: "s1", serverId: UUID())
-        XCTAssertEqual(viewModel.selectedModelId, "claude-opus")
-        XCTAssertEqual(viewModel.currentModelId, "claude-opus")
+        XCTAssertNil(viewModel.selectedModelId)
+        XCTAssertNil(viewModel.currentModelId)
+    }
+
+    func testSendSetModel_RPCError_RevertsSelection() async throws {
+        let connection = RollbackWebSocketConnection()
+        let provider = RollbackWebSocketProvider(connection: connection)
+        let client = ACPClient(
+            configuration: .init(endpoint: URL(string: "ws://localhost:1234")!, pingInterval: nil),
+            socketProvider: provider
+        )
+        let service = ACPService(client: client)
+        try await service.connect()
+
+        let viewModel = makeViewModel(service: service)
+
+        // Establish a prior selection to revert to.
+        let modelOption = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [
+                ACPSessionConfigOptionChoice(id: "old-model", name: "Old"),
+                ACPSessionConfigOptionChoice(id: "new-model", name: "New"),
+            ]),
+            currentValue: .string("old-model")
+        )
+        viewModel.applySessionConfigOptions([modelOption], serverId: UUID(), sessionId: "s1")
+        XCTAssertEqual(viewModel.selectedModelId, "old-model")
+
+        viewModel.sendSetModel("new-model", sessionId: "s1", serverId: UUID())
+        // Applied optimistically.
+        XCTAssertEqual(viewModel.selectedModelId, "new-model")
+
+        // Reject the set with an RPC error; the selection must roll back.
+        let requestId = try await waitForRequestId(connection: connection, method: "session/set_config_option")
+        try enqueueError(id: requestId, error: .serverError(code: -32000, message: "rejected"), on: connection)
+
+        let reverted = await waitUntil { viewModel.selectedModelId == "old-model" }
+        XCTAssertTrue(reverted, "selection should revert to the previous model on RPC error")
+    }
+
+    // MARK: Rollback-test mock transport
+
+    private final class RollbackWebSocketConnection: WebSocketConnection, @unchecked Sendable {
+        private let lock = NSLock()
+        private var events: [WebSocketEvent] = []
+        private var sentTexts: [String] = []
+
+        func connect(headers: [String: String]) async throws {}
+
+        func send(text: String) async throws {
+            lock.lock(); sentTexts.append(text); lock.unlock()
+        }
+
+        func receive() async throws -> WebSocketEvent {
+            while true {
+                lock.lock()
+                if !events.isEmpty {
+                    let event = events.removeFirst()
+                    lock.unlock()
+                    return event
+                }
+                lock.unlock()
+                try await Task.sleep(nanoseconds: 1_000_000)
+            }
+        }
+
+        func close() async {}
+        func ping() async throws {}
+
+        func enqueue(_ event: WebSocketEvent) {
+            lock.lock(); events.append(event); lock.unlock()
+        }
+
+        func sentTextsSnapshot() -> [String] {
+            lock.lock(); defer { lock.unlock() }; return sentTexts
+        }
+    }
+
+    private struct RollbackWebSocketProvider: WebSocketProviding, @unchecked Sendable {
+        let connection: RollbackWebSocketConnection
+        func makeConnection(url: URL) -> WebSocketConnection { connection }
+    }
+
+    private func waitForRequestId(
+        connection: RollbackWebSocketConnection,
+        method: String,
+        attempts: Int = 200
+    ) async throws -> Int {
+        for _ in 0..<attempts {
+            for text in connection.sentTextsSnapshot() {
+                guard let data = text.data(using: .utf8),
+                      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      object["method"] as? String == method,
+                      let id = object["id"] as? Int else { continue }
+                return id
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        throw XCTSkip("Request \(method) was not sent")
+    }
+
+    private func enqueueError(id: Int, error: ACPError, on connection: RollbackWebSocketConnection) throws {
+        let response = ACPWireMessage.response(.init(id: .int(id), error: error))
+        let data = try JSONEncoder().encode(response)
+        connection.enqueue(.text(String(decoding: data, as: UTF8.self)))
+    }
+
+    private func waitUntil(attempts: Int = 200, _ condition: @MainActor () -> Bool) async -> Bool {
+        for _ in 0..<attempts {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return condition()
     }
 }

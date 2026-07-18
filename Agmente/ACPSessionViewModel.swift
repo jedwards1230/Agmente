@@ -251,18 +251,61 @@ final class ACPSessionViewModel: ObservableObject {
     /// Applies a model selection via the spec method
     /// `session/set_config_option` (`configId: "model"`). Discovery is
     /// gofer-native; *setting* stays spec-general.
+    ///
+    /// The selection is applied optimistically and **reverted on every failure
+    /// path** (not connected, no active session, or an RPC error) so the picker
+    /// never strands a phantom active model.
     func sendSetModel(
         _ modelId: String,
         sessionId: String,
         serverId: UUID?
     ) {
+        // Guard preconditions before touching state, so a disconnected/no-session
+        // tap never shows the model as active.
+        guard let service = dependencies.getService() else {
+            dependencies.append("Not connected")
+            return
+        }
+        guard !sessionId.isEmpty else {
+            dependencies.append("No active session")
+            return
+        }
+
+        // Optimistically reflect the selection, capturing the prior value so we
+        // can revert if the set is rejected.
+        let previousModelId = selectedModelId
         selectedModelId = modelId
-        sendSetConfigOption(
-            configId: GoferModelConfig.configId,
-            value: .string(modelId),
+
+        let payload = ACPSessionSetConfigOptionPayload(
             sessionId: sessionId,
-            serverId: serverId
+            configId: GoferModelConfig.configId,
+            value: .string(modelId)
         )
+
+        Task { @MainActor in
+            do {
+                _ = try await service.setSessionConfigOption(payload)
+                // Reconcile the agent's "model" config option (when it exposes
+                // one) so its currentValue matches the applied selection.
+                if let index = sessionConfigOptions.firstIndex(where: { $0.id == GoferModelConfig.configId }) {
+                    let existing = sessionConfigOptions[index]
+                    sessionConfigOptions[index] = ACPSessionConfigOption(
+                        id: existing.id,
+                        name: existing.name,
+                        description: existing.description,
+                        category: existing.category,
+                        kind: existing.kind,
+                        currentValue: .string(modelId)
+                    )
+                    applySessionConfigOptions(sessionConfigOptions, serverId: serverId, sessionId: sessionId)
+                }
+                dependencies.append("Set model to: \(modelId)")
+            } catch {
+                // Revert so the picker doesn't strand a phantom active model.
+                selectedModelId = previousModelId
+                dependencies.append("Failed to set model: \(error)")
+            }
+        }
     }
 
     func cacheCurrentMode(serverId: UUID?, sessionId: String) {

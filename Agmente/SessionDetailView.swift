@@ -1150,10 +1150,9 @@ private extension SessionDetailView {
     }
 
     var currentModelName: String {
-        if let model = sessionViewModel.currentModel {
-            return model.displayName
-        }
-        return sessionViewModel.availableModels.first?.displayName ?? "Model"
+        // Neutral placeholder when nothing is active, so the button label agrees
+        // with the menu (which shows no checkmark in that case).
+        sessionViewModel.currentModel?.displayName ?? "Model"
     }
 
     /// Compact, read-only context-window usage / cost readout, driven by ACP `usage_update`.
