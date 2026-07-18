@@ -6,8 +6,7 @@ and renders them. This doc is Agmente's **client (decode/render) leg** of that
 milestone. Ecosystem work (MCP-over-ACP, subagents, skills, plugins) is **M6**;
 auto-config / import / mDNS discovery is **M7**.
 
-The reference is the wiki **ACP Conformance Matrix**:
-<https://wiki.lilbro.cloud/home/projects/acp-conformance-matrix.md>.
+The reference is an internal ACP v1 conformance matrix (spec ↔ SDK ↔ gofer ↔ Agmente).
 
 Each row is one self-contained PR on its own `main`-based branch, merged into
 `fork` for daily use. See [`FORK.md`](FORK.md) → *Working on upstreamable
