@@ -630,6 +630,119 @@ final class ACPSessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.availableCommands.first?.name, "cached-command")
     }
 
+    // MARK: - Plan Snapshot Tests
+
+    private func planParams(entries: [ACP.Value], sessionId: String) -> ACP.Value {
+        .object([
+            "sessionId": .string(sessionId),
+            "update": .object([
+                "sessionUpdate": .string("plan"),
+                "entries": .array(entries),
+            ]),
+        ])
+    }
+
+    func testPlanUpdate_PopulatesPlan() {
+        let viewModel = makeViewModel()
+        let serverId = UUID()
+        let sessionId = "test-session"
+        viewModel.setSessionContext(serverId: serverId, sessionId: sessionId)
+
+        let params = planParams(entries: [
+            .object([
+                "content": .string("Step one"),
+                "priority": .string("high"),
+                "status": .string("in_progress"),
+            ]),
+            .object([
+                "content": .string("Step two"),
+                "priority": .string("low"),
+                "status": .string("pending"),
+            ]),
+        ], sessionId: sessionId)
+
+        viewModel.handleChatUpdate(params, activeSessionId: sessionId, serverId: serverId)
+
+        XCTAssertEqual(viewModel.plan.count, 2)
+        XCTAssertEqual(viewModel.plan[0].content, "Step one")
+        XCTAssertEqual(viewModel.plan[0].priority, .high)
+        XCTAssertEqual(viewModel.plan[0].status, .inProgress)
+        XCTAssertEqual(viewModel.plan[1].status, .pending)
+    }
+
+    func testPlanUpdate_ReplacesPriorSnapshot() {
+        let viewModel = makeViewModel()
+        let serverId = UUID()
+        let sessionId = "test-session"
+        viewModel.setSessionContext(serverId: serverId, sessionId: sessionId)
+
+        viewModel.handleChatUpdate(planParams(entries: [
+            .object(["content": .string("Old A"), "status": .string("completed")]),
+            .object(["content": .string("Old B"), "status": .string("pending")]),
+        ], sessionId: sessionId), activeSessionId: sessionId, serverId: serverId)
+        XCTAssertEqual(viewModel.plan.count, 2)
+
+        // A fresh snapshot fully replaces the previous plan.
+        viewModel.handleChatUpdate(planParams(entries: [
+            .object(["content": .string("New only"), "status": .string("in_progress")]),
+        ], sessionId: sessionId), activeSessionId: sessionId, serverId: serverId)
+
+        XCTAssertEqual(viewModel.plan.count, 1)
+        XCTAssertEqual(viewModel.plan[0].content, "New only")
+    }
+
+    func testPlanUpdate_EmptyEntriesClearsPlan() {
+        let viewModel = makeViewModel()
+        let serverId = UUID()
+        let sessionId = "test-session"
+        viewModel.setSessionContext(serverId: serverId, sessionId: sessionId)
+
+        viewModel.handleChatUpdate(planParams(entries: [
+            .object(["content": .string("Something"), "status": .string("pending")]),
+        ], sessionId: sessionId), activeSessionId: sessionId, serverId: serverId)
+        XCTAssertFalse(viewModel.plan.isEmpty)
+
+        viewModel.handleChatUpdate(planParams(entries: [], sessionId: sessionId),
+                                   activeSessionId: sessionId, serverId: serverId)
+        XCTAssertTrue(viewModel.plan.isEmpty)
+    }
+
+    func testPlan_ClearedOnLoadChatState() {
+        let viewModel = makeViewModel(cacheDelegate: MockCacheDelegate())
+        let serverId = UUID()
+        let sessionId = "test-session"
+        viewModel.setSessionContext(serverId: serverId, sessionId: sessionId)
+
+        viewModel.handleChatUpdate(planParams(entries: [
+            .object(["content": .string("Lingering"), "status": .string("pending")]),
+        ], sessionId: sessionId), activeSessionId: sessionId, serverId: serverId)
+        XCTAssertFalse(viewModel.plan.isEmpty)
+
+        // Switching sessions clears the non-persisted plan snapshot.
+        viewModel.loadChatState(serverId: serverId, sessionId: "other-session", canLoadFromStorage: false)
+        XCTAssertTrue(viewModel.plan.isEmpty)
+    }
+
+    func testPlanRowStyle_StatusAndPriorityMapping() {
+        XCTAssertEqual(ACPPlanRowStyle.symbolName(for: .pending), "circle")
+        XCTAssertEqual(ACPPlanRowStyle.symbolName(for: .inProgress), "circle.lefthalf.filled")
+        XCTAssertEqual(ACPPlanRowStyle.symbolName(for: .completed), "checkmark.circle.fill")
+        XCTAssertEqual(ACPPlanRowStyle.symbolName(for: .unknown), "questionmark.circle")
+
+        XCTAssertTrue(ACPPlanRowStyle.isCompleted(.completed))
+        XCTAssertFalse(ACPPlanRowStyle.isCompleted(.pending))
+
+        XCTAssertEqual(ACPPlanRowStyle.priorityLabel(for: .high), "High")
+        XCTAssertNil(ACPPlanRowStyle.priorityLabel(for: .unknown))
+
+        let entries = [
+            ACPPlanEntry(content: "a", priority: .high, status: .completed),
+            ACPPlanEntry(content: "b", priority: .low, status: .pending),
+            ACPPlanEntry(content: "c", priority: .medium, status: .completed),
+        ]
+        XCTAssertEqual(ACPPlanRowStyle.completedCount(entries), 2)
+    }
+
     func testMigrateSessionCommandsCache_MigratesSuccessfully() {
         let viewModel = makeViewModel()
         let serverId = UUID()

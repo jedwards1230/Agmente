@@ -95,6 +95,10 @@ final class ACPSessionViewModel: ObservableObject {
     @Published private(set) var stopReason: String = ""
     /// Latest context-window usage / cost reported by the agent via `usage_update`.
     @Published private(set) var usage: ACPUsageInfo?
+    /// Current agent plan for the active session. The agent sends its full plan
+    /// as a snapshot on each `plan` update, so this is replaced wholesale (an
+    /// empty snapshot clears it).
+    @Published private(set) var plan: [ACPPlanEntry] = []
 
     weak var cacheDelegate: ACPSessionCacheDelegate?
     weak var eventDelegate: ACPSessionEventDelegate?
@@ -849,6 +853,15 @@ final class ACPSessionViewModel: ObservableObject {
             if let serverId = serverId {
                 eventDelegate?.sessionInfoDidUpdate(info, serverId: serverId, sessionId: sessionId)
             }
+
+        case .plan(let entries):
+            // Full snapshot: replace the current plan (empty clears it).
+            plan = entries
+            if entries.isEmpty {
+                dependencies.append("Plan cleared")
+            } else {
+                dependencies.append("Plan updated (\(entries.count) item(s))")
+            }
         }
     }
 
@@ -1241,6 +1254,10 @@ final class ACPSessionViewModel: ObservableObject {
         currentServerId = serverId
         currentSessionId = sessionId
 
+        // Plan is a live, non-persisted snapshot scoped to a session; clear it
+        // on switch so a stale plan never bleeds into another session.
+        plan = []
+
         // Check cache first via delegate
         if let cachedChat = cacheDelegate?.loadMessages(for: serverId, sessionId: sessionId) {
             chatMessages = cachedChat
@@ -1273,6 +1290,7 @@ final class ACPSessionViewModel: ObservableObject {
         chatMessages = []
         stopReason = ""
         usage = nil
+        plan = []
         streamingMessageId = nil
         currentServerId = nil
         currentSessionId = nil
