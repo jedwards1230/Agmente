@@ -366,6 +366,159 @@ final class SessionUpdateHandlerTests: XCTestCase {
         XCTAssertNil(info.cost)
     }
 
+    // MARK: - Config Option Update Tests
+
+    func testConfigOptionUpdateSelectModelWithOptions() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("config_option_update"),
+                "configOptions": .array([
+                    .object([
+                        "id": .string("model"),
+                        "name": .string("Model"),
+                        "category": .string("model"),
+                        "type": .string("select"),
+                        "currentValue": .string("claude-opus-4-8"),
+                        "options": .array([
+                            .object(["value": .string("claude-opus-4-8"), "name": .string("Opus")]),
+                            .object(["value": .string("claude-sonnet-4-5"), "name": .string("Sonnet")])
+                        ])
+                    ])
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .configOptionsUpdate(let options) = events[0] else {
+            XCTFail("Expected configOptionsUpdate event")
+            return
+        }
+        XCTAssertEqual(options.count, 1)
+        let option = options[0]
+        XCTAssertEqual(option.id, "model")
+        XCTAssertEqual(option.name, "Model")
+        XCTAssertEqual(option.category, "model")
+        XCTAssertEqual(option.currentValue.stringValue, "claude-opus-4-8")
+        guard case .select(let choices) = option.kind else {
+            XCTFail("Expected select kind")
+            return
+        }
+        XCTAssertEqual(choices.map(\.id), ["claude-opus-4-8", "claude-sonnet-4-5"])
+        XCTAssertEqual(option.selectedChoiceName, "Opus")
+    }
+
+    func testConfigOptionUpdateBoolean() {
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("config_option_update"),
+                "configOptions": .array([
+                    .object([
+                        "id": .string("yolo"),
+                        "name": .string("YOLO mode"),
+                        "type": .string("boolean"),
+                        "currentValue": .bool(true)
+                    ])
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .configOptionsUpdate(let options) = events[0] else {
+            XCTFail("Expected configOptionsUpdate event")
+            return
+        }
+        XCTAssertEqual(options.count, 1)
+        XCTAssertEqual(options[0].kind, .boolean)
+        XCTAssertEqual(options[0].currentValue.boolValue, true)
+    }
+
+    func testConfigOptionUpdateUnknownKindDecodesGracefully() {
+        // An unrecognized option `type` must not fail the whole update — it
+        // decodes to `.unknown` so newer server-side kinds degrade gracefully.
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("config_option_update"),
+                "configOptions": .array([
+                    .object([
+                        "id": .string("temperature"),
+                        "name": .string("Temperature"),
+                        "type": .string("slider"),
+                        "currentValue": .string("0.7")
+                    ])
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .configOptionsUpdate(let options) = events[0] else {
+            XCTFail("Expected configOptionsUpdate event")
+            return
+        }
+        XCTAssertEqual(options.count, 1)
+        XCTAssertEqual(options[0].kind, .unknown("slider"))
+    }
+
+    func testConfigOptionUpdateSkipsMalformedEntries() {
+        // Entries missing `id`/`name` are skipped; well-formed siblings survive.
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("config_option_update"),
+                "configOptions": .array([
+                    .object(["name": .string("no id")]),
+                    .object([
+                        "id": .string("model"),
+                        "name": .string("Model"),
+                        "type": .string("select"),
+                        "currentValue": .string("m1"),
+                        "options": .array([
+                            .object(["value": .string("m1"), "name": .string("One")])
+                        ])
+                    ])
+                ])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .configOptionsUpdate(let options) = events[0] else {
+            XCTFail("Expected configOptionsUpdate event")
+            return
+        }
+        XCTAssertEqual(options.map(\.id), ["model"])
+    }
+
+    func testConfigOptionUpdateEmptyIsEmittedAsReplaceSnapshot() {
+        // A full snapshot with no options is still a REPLACE — emit an empty
+        // event so the consumer can clear its set (mirrors `plan`).
+        let params: ACP.Value = .object([
+            "sessionId": .string("session-1"),
+            "update": .object([
+                "sessionUpdate": .string("config_option_update"),
+                "configOptions": .array([])
+            ])
+        ])
+
+        let events = handler.handle(params: params)
+
+        XCTAssertEqual(events.count, 1)
+        guard case .configOptionsUpdate(let options) = events[0] else {
+            XCTFail("Expected configOptionsUpdate event")
+            return
+        }
+        XCTAssertTrue(options.isEmpty)
+    }
+
     // MARK: - Session Info Update Tests
 
     func testSessionInfoUpdateTitleAndTimestamp() {

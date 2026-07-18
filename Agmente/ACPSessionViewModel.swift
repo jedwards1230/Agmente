@@ -1258,6 +1258,13 @@ final class ACPSessionViewModel: ObservableObject {
         // on switch so a stale plan never bleeds into another session.
         plan = []
 
+        // Config options and the model selection are likewise live, session-scoped
+        // state — the agent re-advertises them per session via activation and
+        // `config_option_update`. Clear on switch so a stale set/selection never
+        // bleeds into another session before the new session's snapshot arrives.
+        sessionConfigOptions = []
+        selectedModelId = nil
+
         // Check cache first via delegate
         if let cachedChat = cacheDelegate?.loadMessages(for: serverId, sessionId: sessionId) {
             chatMessages = cachedChat
@@ -1291,6 +1298,8 @@ final class ACPSessionViewModel: ObservableObject {
         stopReason = ""
         usage = nil
         plan = []
+        sessionConfigOptions = []
+        selectedModelId = nil
         streamingMessageId = nil
         currentServerId = nil
         currentSessionId = nil

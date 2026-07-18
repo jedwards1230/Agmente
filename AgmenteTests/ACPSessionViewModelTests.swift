@@ -840,6 +840,81 @@ final class ACPSessionViewModelTests: XCTestCase {
         XCTAssertTrue(reverted, "selection should revert to the previous model on RPC error")
     }
 
+    // MARK: - Config Option Update (REPLACE snapshot)
+
+    func testApplySessionConfigOptions_ReplacesSetAndReconcilesModelSelection() {
+        let viewModel = makeViewModel()
+
+        // Initial snapshot advertises a model option selecting "m1".
+        let first = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [
+                ACPSessionConfigOptionChoice(id: "m1", name: "One"),
+                ACPSessionConfigOptionChoice(id: "m2", name: "Two"),
+            ]),
+            currentValue: .string("m1")
+        )
+        viewModel.applySessionConfigOptions([first], serverId: UUID(), sessionId: "s1")
+        XCTAssertEqual(viewModel.selectedModelId, "m1")
+
+        // A server-pushed REPLACE snapshot moves the current model to "m2" and
+        // drops down to a single option — the picker selection follows.
+        let second = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [ACPSessionConfigOptionChoice(id: "m2", name: "Two")]),
+            currentValue: .string("m2")
+        )
+        viewModel.applySessionConfigOptions([second], serverId: UUID(), sessionId: "s1")
+
+        XCTAssertEqual(viewModel.selectedModelId, "m2")
+        XCTAssertEqual(viewModel.currentModelId, "m2")
+        // REPLACE: the prior set is gone, only the new option remains.
+        XCTAssertEqual(viewModel.sessionConfigOptions.map(\.id), [GoferModelConfig.configId])
+        guard case .select(let choices) = viewModel.sessionConfigOptions.first?.kind else {
+            return XCTFail("Expected select kind")
+        }
+        XCTAssertEqual(choices.map(\.id), ["m2"])
+    }
+
+    func testLoadChatState_ResetsConfigOptionsAndModelSelection() {
+        let viewModel = makeViewModel()
+        let modelOption = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [ACPSessionConfigOptionChoice(id: "m1", name: "One")]),
+            currentValue: .string("m1")
+        )
+        viewModel.applySessionConfigOptions([modelOption], serverId: UUID(), sessionId: "s1")
+        XCTAssertEqual(viewModel.selectedModelId, "m1")
+        XCTAssertFalse(viewModel.sessionConfigOptions.isEmpty)
+
+        // Switching sessions clears session-scoped config/model state so it
+        // cannot bleed into the next session before its snapshot arrives.
+        viewModel.loadChatState(serverId: UUID(), sessionId: "s2", canLoadFromStorage: false)
+
+        XCTAssertNil(viewModel.selectedModelId)
+        XCTAssertNil(viewModel.currentModelId)
+        XCTAssertTrue(viewModel.sessionConfigOptions.isEmpty)
+    }
+
+    func testResetChatState_ClearsConfigOptionsAndModelSelection() {
+        let viewModel = makeViewModel()
+        let modelOption = ACPSessionConfigOption(
+            id: GoferModelConfig.configId,
+            name: "Model",
+            kind: .select(options: [ACPSessionConfigOptionChoice(id: "m1", name: "One")]),
+            currentValue: .string("m1")
+        )
+        viewModel.applySessionConfigOptions([modelOption], serverId: UUID(), sessionId: "s1")
+
+        viewModel.resetChatState()
+
+        XCTAssertNil(viewModel.selectedModelId)
+        XCTAssertTrue(viewModel.sessionConfigOptions.isEmpty)
+    }
+
     // MARK: Rollback-test mock transport
 
     private final class RollbackWebSocketConnection: WebSocketConnection, @unchecked Sendable {
