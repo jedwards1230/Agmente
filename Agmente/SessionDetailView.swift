@@ -84,6 +84,12 @@ struct SessionDetailView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 12) {
+                if !sessionViewModel.plan.isEmpty {
+                    ACPPlanChecklistView(entries: sessionViewModel.plan)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                }
+
                 transcriptContent
                     .frame(maxHeight: .infinity)
 

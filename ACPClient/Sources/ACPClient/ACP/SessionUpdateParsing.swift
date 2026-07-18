@@ -22,8 +22,11 @@ public enum ACPSessionUpdateParser {
         if let kind {
             switch kind {
             case "plan":
-                let title = update["title"]?.stringValue ?? "Plan"
-                return "session/update [\(session)] plan: \(title)"
+                let entries = planEntries(from: update)
+                if entries.isEmpty {
+                    return "session/update [\(session)] plan cleared"
+                }
+                return "session/update [\(session)] plan: \(entries.count) item(s)"
             case "agent_message_chunk":
                 let text = extractText(from: update)
                 return "session/update [\(session)] message: \(text)"
@@ -60,6 +63,32 @@ public enum ACPSessionUpdateParser {
 
         let compact = fallbackCompact?(update) ?? compactJSON(update)
         return "session/update [\(session)] \(compact)"
+    }
+
+    /// Decode the entries of a `plan` session update into typed plan entries.
+    ///
+    /// The agent sends its full current plan each time (a snapshot), so callers
+    /// should treat the result as a replacement for any prior plan. An empty or
+    /// missing `entries` array yields an empty result (a cleared plan). Entries
+    /// missing a `content` string are skipped; unknown priority/status values
+    /// decode gracefully to `.unknown` rather than failing the update.
+    public static func planEntries(from update: [String: ACP.Value]) -> [ACPPlanEntry] {
+        guard let entries = update["entries"]?.arrayValue else { return [] }
+        var result: [ACPPlanEntry] = []
+        result.reserveCapacity(entries.count)
+        for value in entries {
+            guard let object = value.objectValue else { continue }
+            guard let content = object["content"]?.stringValue,
+                  !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let entry = ACPPlanEntry(
+                id: result.count,
+                content: content,
+                priority: ACPPlanEntryPriority(wire: object["priority"]?.stringValue),
+                status: ACPPlanEntryStatus(wire: object["status"]?.stringValue)
+            )
+            result.append(entry)
+        }
+        return result
     }
 
     /// Extract human-readable text from a session/update payload.

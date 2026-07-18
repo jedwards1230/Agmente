@@ -34,6 +34,10 @@ public enum ACPSessionUpdateEvent: Equatable, Sendable {
 
     /// Session metadata (title / last-activity timestamp) has been updated.
     case sessionInfoUpdate(ACPSessionInfo)
+
+    /// The agent's plan changed. This is a full snapshot that replaces any
+    /// prior plan for the session; an empty array means the plan was cleared.
+    case plan(entries: [ACPPlanEntry])
 }
 
 // MARK: - Session Info Model
@@ -273,6 +277,12 @@ public final class ACPSessionUpdateHandler: Sendable {
         case "session_info_update":
             guard let info = parseSessionInfo(from: update) else { return [] }
             return [.sessionInfoUpdate(info)]
+
+        case "plan":
+            // The plan is a full snapshot; always emit (even when empty) so the
+            // consumer can replace or clear the current plan.
+            let entries = ACPSessionUpdateParser.planEntries(from: update)
+            return [.plan(entries: entries)]
 
         default:
             // Unknown kind - try to extract text as fallback
