@@ -1,10 +1,16 @@
 # ACP client backlog — M5 featureset expansion
 
-The fork's next milestone is a cross-repo **M5 — ACP v1 Featureset Expansion**:
-the agent-sdk-go models the wire types, gofer emits them, and Agmente decodes
-and renders them. This doc is Agmente's **client (decode/render) leg** of that
-milestone. Ecosystem work (MCP-over-ACP, subagents, skills, plugins) is **M6**;
+The cross-repo **M5 — ACP v1 Featureset Expansion** milestone (the agent-sdk-go
+models the wire types, gofer emits them, and Agmente decodes and renders them)
+is **complete as of 2026-07-25**: every committed slice is live end-to-end
+across all three repos, and Agmente's client leg — this doc — is done. Ecosystem
+work (MCP-over-ACP, subagents, skills, plugins) is **M6**, and is next;
 auto-config / import / mDNS discovery is **M7**.
+
+> **Milestone numbering is per-repo.** Agmente's M6/M7 above are *this repo's*
+> stages. The same ecosystem work is **gofer's M7** and the same wire modeling
+> was **agent-sdk-go's M4** — each repo numbers from what shipped in it. Don't
+> reconcile the numbers across repos; match on the work, not the label.
 
 The reference is an internal ACP v1 conformance matrix (spec ↔ SDK ↔ gofer ↔ Agmente).
 
@@ -32,15 +38,16 @@ sequencing.
 | # | Branch | Scope | Status |
 | - | ------ | ----- | ------ |
 | 1 | `feat/acp-usage-update` | Decode `usage_update` (context tokens + cost) → read-only badge | **done** — merged to `fork`; wire side landed (SDK v0.6.0 + gofer #97), live end-to-end |
-| 2 | `feat/acp-session-info-update` | `session_info_update` → live session title/updatedAt | **done** — merged to `fork` |
-| 3 | `feat/acp-plan-render` | Render `plan` on the ACP path (today only Codex renders plans) | todo |
-| 4 | `feat/acp-content-blocks` | Decode non-text `ContentBlock`s (`image`/`audio`/`resource`) + tool-call `diff` (red/green edit view), dropped today | ready when a producer emits (see note) |
+| 2 | `feat/acp-session-info-update` | `session_info_update` → live session title/updatedAt | **done** — merged to `fork` (`933b440`) |
+| 2a | `feat/acp-config-option-update` | Apply inbound `config_option_update` (push agent-side model changes into the picker) | **done** — merged to `fork` (`0cef925`, #14); gofer emits it (agent-sdk-go v0.10.0) |
+| 3 | `feat/acp-plan-render` | Render `plan` on the ACP path (today only Codex renders plans) | **done** — merged to `fork` (`91c2a57`, #13); gofer emits `plan` (agent-sdk-go v0.9.0) |
+| 4 | `feat/acp-content-blocks` | Decode non-text `ContentBlock`s (`image`/`audio`/`resource`) + tool-call `diff` (red/green edit view) | **`diff` done** — merged to `fork` (`f15482a`, #10), live end-to-end (SDK v0.7.0 emits it from the edit/write tools). `image`/`audio`/`resource` still have **no producer anywhere** — see note |
 
 ## Wire-shape conformance (package-only)
 
 | # | Branch | Scope | Status |
 | - | ------ | ----- | ------ |
-| 5 | `feat/acp-session-methods-v1` | Align `session/list`, `resume`, `set_config_option`, and **`cwd`** to the stable ACP v1 shapes | todo (scope first — may split) |
+| 5 | `feat/acp-session-methods-v1` | Align `session/list`, `resume`, `set_config_option`, and **`cwd`** to the stable ACP v1 shapes | **done** — merged to `fork` via `ab9b267` (#12). `ACPService.listSessions`/`loadSession`/`resumeSession`, the `resumeSession`/`listSessions`/`sessionListRequiresCwd` capability flags on `AgentInfo`, and `cwd` on `SessionSummary` are all in the package |
 
 ## Model picker (gofer-native)
 
@@ -56,13 +63,16 @@ sequencing.
 
 ## Notes
 
-- **#4 is not blocked on Agmente.** `image`/`audio`/`resource` content and
-  tool-call `diff` are already modeled upstream/SDK-side and pass through gofer,
-  but no producer emits them yet. Scope #4 as *ready to decode when a producer
-  emits*, not as blocked work.
+- **#4, updated.** The `diff` half is **done and live** — agent-sdk-go v0.7.0
+  emits a structured `diff` block from the edit/write tools, gofer passes it
+  through, and Agmente renders it. `image`/`audio`/`resource` remain modeled
+  with **no producer in any of the three repos**, because no builtin tool
+  naturally emits them (`terminal` likewise). Treat those three as **descoped
+  from M5**, not as pending Agmente work — there is nothing to decode until
+  some tool produces one.
 - **`cwd` source.** `cwd` is delivered on `session/list`'s `SessionInfo` — it is
-  **not** carried by `session_info_update` (#2). It lands with the session
-  methods in #5, which is why the cwd-defaults-to-root fix rides there.
+  **not** carried by `session_info_update` (#2). It landed with the session
+  methods in #5, which is why the cwd-defaults-to-root fix rode there.
 - **Schema source of truth:** the v1 machine schema at
   `github.com/agentclientprotocol/agent-client-protocol` (`schema/v1/schema.json`).
   `usage_update` is stable; verify each new variant.
